@@ -1,1 +1,3 @@
 com/chaoskv/KVServer.class
+com/chaoskv/RaftNode$State.class
+com/chaoskv/RaftNode.class

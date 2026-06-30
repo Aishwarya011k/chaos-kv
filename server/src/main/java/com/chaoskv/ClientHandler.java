@@ -8,11 +8,14 @@ public class ClientHandler implements Runnable {
     private final Socket socket;
     private final KVStore store;
     private final List<NodePeer> peers;
+    private final RaftNode raft;
 
-    public ClientHandler(Socket socket, KVStore store, List<NodePeer> peers) {
+    public ClientHandler(Socket socket, KVStore store,
+                         List<NodePeer> peers, RaftNode raft) {
         this.socket = socket;
-        this.store = store;
-        this.peers = peers;
+        this.store  = store;
+        this.peers  = peers;
+        this.raft   = raft;
     }
 
     @Override
@@ -27,37 +30,65 @@ public class ClientHandler implements Runnable {
                 String[] parts = line.trim().split("\\s+", 3);
                 String cmd = parts[0].toUpperCase();
 
-                if (cmd.equals("REPLICATE")) {
-                    // incoming replication from leader — apply silently
-                    String inner = line.substring("REPLICATE ".length());
-                    String[] rParts = inner.trim().split("\\s+", 3);
-                    switch (rParts[0].toUpperCase()) {
-                        case "PUT"    -> store.put(rParts[1], rParts[2]);
-                        case "DELETE" -> store.delete(rParts[1]);
+                switch (cmd) {
+                    case "HEARTBEAT" -> {
+                        int term = Integer.parseInt(parts[1]);
+                        String leaderId = parts[2];
+                        raft.handleHeartbeat(term, leaderId);
                     }
-                    out.println("ACK");
-                    continue;
-                }
-
-                String response = switch (cmd) {
+                    case "VOTE_REQUEST" -> {
+                        int term = Integer.parseInt(parts[1]);
+                        String candidateId = parts[2];
+                        out.println(raft.handleVoteRequest(term, candidateId));
+                    }
+                    case "REPLICATE" -> {
+                        String inner = line.substring("REPLICATE ".length());
+                        String[] rp = inner.trim().split("\\s+", 3);
+                        switch (rp[0].toUpperCase()) {
+                            case "PUT"    -> store.put(rp[1], rp[2]);
+                            case "DELETE" -> store.delete(rp[1]);
+                        }
+                        out.println("ACK");
+                    }
                     case "PUT" -> {
-                        if (parts.length < 3) yield "ERR usage: PUT key value";
-                        String result = store.put(parts[1], parts[2]);
+                        if (raft.getState() != RaftNode.State.LEADER) {
+                            out.println("ERR not the leader");
+                            break;
+                        }
+                        if (parts.length < 3) { out.println("ERR usage: PUT key value"); break; }
+                        String res = store.put(parts[1], parts[2]);
                         peers.forEach(p -> p.replicate("PUT " + parts[1] + " " + parts[2]));
-                        yield result;
+                        out.println(res);
                     }
-                    case "GET" -> parts.length == 2
-                                  ? store.get(parts[1])
-                                  : "ERR usage: GET key";
+                    case "GET" -> {
+                        if (parts.length < 2) { out.println("ERR usage: GET key"); break; }
+                        out.println(store.get(parts[1]));
+                    }
                     case "DELETE" -> {
-                        if (parts.length < 2) yield "ERR usage: DELETE key";
-                        String result = store.delete(parts[1]);
+                        if (raft.getState() != RaftNode.State.LEADER) {
+                            out.println("ERR not the leader");
+                            break;
+                        }
+                        if (parts.length < 2) { out.println("ERR usage: DELETE key"); break; }
+                        String res = store.delete(parts[1]);
                         peers.forEach(p -> p.replicate("DELETE " + parts[1]));
-                        yield result;
+                        out.println(res);
                     }
-                    default -> "ERR unknown command";
-                };
-                out.println(response);
+                    case "STATUS" -> out.println(
+                        "node=" + raft.getNodeId()
+                        + " state=" + raft.getState()
+                        + " term=" + raft.getTerm()
+                    );
+                    case "KILL" -> {
+                        out.println("DYING");
+                        out.flush();
+                        new Thread(() -> {
+                            try { Thread.sleep(200); } catch (InterruptedException ignored) {}
+                            System.exit(0);
+                        }).start();
+                    }
+                    default -> out.println("ERR unknown command");
+                }
             }
         } catch (IOException e) {
             System.out.println("Client disconnected: " + e.getMessage());

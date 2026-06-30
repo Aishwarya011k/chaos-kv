@@ -1,3 +1,7 @@
 target/
 *.class
 *.log
+wal-node-*.log
+node_modules/
+dist/
+.vite/

@@ -1,5 +1,7 @@
 /home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/KVStore.java
 /home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/WriteAheadLog.java
 /home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/KVServer.java
+/home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/RaftNode.java
 /home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/ClientHandler.java
 /home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/NodePeer.java
+/home/aishwarya/Documents/chaos-kv/server/src/main/java/com/chaoskv/DashboardServer.java
